@@ -1,4 +1,4 @@
-import React, { useState, useCallback, updateElements } from "react";
+import React, { useState, useCallback } from "react";
 import ReactFlow, {
   addEdge,
   MiniMap,
@@ -7,13 +7,19 @@ import ReactFlow, {
   useNodesState,
   useEdgesState,
   useReactFlow,
-  ReactFlowProvider
+  ReactFlowProvider,
+  MarkerType,
+  Position
 } from "reactflow";
 import "reactflow/dist/style.css";
 import "./Flow.css"
-import TextUpdaterNode from './TextUpdaterNode.js';
+import TextUpdaterNode from './node/TextUpdaterNode.js';
+import ButtonEdge from './edge/ButtonEdge.js';
+import './node/text-updater-node.css';
+import CustomNode from "./node/CustomNode/CustomNode.js";
+import './node/CustomNode/Overview.css';
+import ModalNode from './node/modal-node/modal-node.js'
 
-import './text-updater-node.css';
 
 // import {
 //   nodes as initialNodes,
@@ -25,29 +31,60 @@ const initialNodes = [
   {
     id: 'node-2',
     type: 'output',
+    typeNode: 'Function',
     targetPosition: 'top',
     position: { x: 0, y: 200 },
-    data: { label: 'node 2' },
+    data: {
+      label: 'node 2',
+      value: 2123
+    },
   },
   {
     id: 'node-3',
     type: 'output',
+    typeNode: 'Decision',
+    targetPosition: 'top',
+    position: { x: 100, y: 200 },
+    data: {
+      label: 'node 3',
+      value: 2123
+    },
+  },
+  {
+    id: 'node-4',
+    type: 'custom',
     targetPosition: 'top',
     position: { x: 200, y: 200 },
-    data: { label: 'node 3' },
+    data: {
+      selects: {
+        'handle-0': 'smoothstep',
+        // 'handle-1': 'smoothstep',
+      }
+    },
   },
 ];
 
 const initialEdges = [
-  { id: 'edge-1', source: 'node-1', target: 'node-2', sourceHandle: 'a' },
-  { id: 'edge-2', source: 'node-1', target: 'node-3', sourceHandle: 'b' },
+  { id: 'edge-1', source: 'node-1', target: 'node-2', sourceHandle: 'b', type: 'buttonedge' },
+  { id: 'edge-2', source: 'node-1', target: 'node-3', sourceHandle: 'b', type: 'buttonedge' },
+  {
+    id: 'edge-3', source: 'node-4', target: 'node-3', sourceHandle: 'handle-0', type: 'smoothstep', data: {
+      selectIndex: 0,
+    },
+    markerEnd: {
+      type: MarkerType.ArrowClosed,
+    },
+  },
 ];
 
-const nodeTypes = { textUpdater: TextUpdaterNode };
+const nodeTypes = { textUpdater: TextUpdaterNode, custom: CustomNode };
+const edgeTypes = { buttonedge: ButtonEdge };
 
 const flowKey = 'example-flow';
 
 const getNodeId = () => `randomnode_${+new Date()}`;
+
+
 
 // const onInit = (reactFlowInstance) =>
 //   console.log("flow loaded:", reactFlowInstance);
@@ -55,7 +92,10 @@ const getNodeId = () => `randomnode_${+new Date()}`;
 const OverviewFlow = () => {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
+  const [openModal, setOpenModal] = useState(false);
   const [rfInstance, setRfInstance] = useState(null);
+  const [idNode, setIdNode] = useState('');
+  const [typeNode, setTypeNode] = useState('');
   const { setViewport } = useReactFlow();
 
   const onConnect = useCallback((params) => setEdges((eds) => addEdge(params, eds)), [setEdges]);
@@ -65,8 +105,24 @@ const OverviewFlow = () => {
       const flow = rfInstance.toObject();
       localStorage.setItem(flowKey, JSON.stringify(flow));
       console.log(JSON.stringify(flow));
+      console.log(flow);
     }
   }, [rfInstance]);
+
+  const onCloseModalNode = () => {
+    setOpenModal(false);
+  }
+  const onNodeClick = (event, node) => {
+    
+    console.log('click node', node.id)
+    if(node){
+      setIdNode(node.id)
+      setOpenModal(true);
+      setTypeNode(node.typeNode);
+
+    }
+    
+  };
 
   const onRestore = useCallback(() => {
     const restoreFlow = async () => {
@@ -74,7 +130,7 @@ const OverviewFlow = () => {
       if (flow) {
         console.log(flow.nodes)
         const { x = 0, y = 0, zoom = 1 } = flow.viewport;
-        
+
         setEdges(flow.edges || []);
         setNodes(flow.nodes || []);
         setViewport({ x, y, zoom });
@@ -93,22 +149,38 @@ const OverviewFlow = () => {
         x: Math.random() * window.innerWidth - 100,
         y: Math.random() * window.innerHeight,
       },
+      type: 'custom'
     };
     setNodes((nds) => nds.concat(newNode));
   }, [setNodes]);
 
+  const edgesWithUpdatedTypes = edges.map((edge) => {
+    if (edge.sourceHandle) {
+      if (edge.sourceHandle !== 'a' && edge.sourceHandle !== 'b') {
+        const edgeType = nodes.find((node) => node.type === 'custom').data.selects[edge.sourceHandle];
+        edge.type = edgeType;
+      }
+
+    }
+
+    return edge;
+  });
+
 
   return (
+
     <ReactFlow
       nodes={nodes}
-      edges={edges}
+      edges={edgesWithUpdatedTypes}
       onNodesChange={onNodesChange}
       onEdgesChange={onEdgesChange}
       onConnect={onConnect}
       onInit={setRfInstance}
       nodeTypes={nodeTypes}
+      edgeTypes={edgeTypes}
       fitView
       attributionPosition="top-right"
+      onNodeClick={onNodeClick}
     >
       <MiniMap
         nodeStrokeColor={(n) => {
@@ -131,9 +203,14 @@ const OverviewFlow = () => {
       <div className="save__controls">
         <button onClick={onSave}>save</button>
         <button onClick={onRestore}>restore</button>
-        <button onClick={onAdd}>add node</button> 
+        <button onClick={onAdd}>add node</button>
       </div>
+
+      <ModalNode cModal={onCloseModalNode} showModalNode={openModal} idNode={idNode} typeNode={typeNode}/>
     </ReactFlow>
+
+
+
   );
 };
 
@@ -143,4 +220,3 @@ export default () => (
     <OverviewFlow />
   </ReactFlowProvider>
 );
-// export default OverviewFlow;

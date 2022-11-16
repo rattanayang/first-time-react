@@ -1,0 +1,9 @@
+
+.modal-header[type-Node='Function'] {
+    background-color: #FEC8D8 ;
+}
+
+
+.modal-header[type-Node='Decision'] {
+    background-color: #B7A4DA;
+}
